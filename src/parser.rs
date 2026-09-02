@@ -44,9 +44,9 @@ impl<R: BufRead> Parser<R> {
         };
         let board_rows = self.read_board_rows(width, height)?;
 
-        let (piece_width, piece_height) = self
-            .find_dimensions("Piece")?
-            .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "piece header not found"))?;
+        let (piece_width, piece_height) = self.find_dimensions("Piece")?.ok_or_else(|| {
+            io::Error::new(io::ErrorKind::UnexpectedEof, "piece header not found")
+        })?;
         let (piece_rows, piece_cells) = self.read_piece_rows(piece_width, piece_height)?;
 
         Ok(Some(Turn {

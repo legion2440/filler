@@ -173,12 +173,7 @@ fn formats_coordinates_exactly_for_game_engine() {
 #[test]
 fn strategy_returns_a_legal_move() {
     let board = board(&[
-        "........",
-        "..@.....",
-        "........",
-        "........",
-        ".....$..",
-        "........",
+        "........", "..@.....", "........", "........", ".....$..", "........",
     ]);
     let piece = piece(&[".OO", ".O."]);
     let player = Player::new(1).unwrap();

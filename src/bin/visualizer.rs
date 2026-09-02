@@ -153,10 +153,10 @@ fn parse_args() -> io::Result<Config> {
             }
             "--engine-dir" => {
                 index += 1;
-                config.engine_dir = Some(PathBuf::from(
-                    args.get(index)
-                        .ok_or_else(|| invalid_input("--engine-dir requires a value"))?,
-                ));
+                config.engine_dir =
+                    Some(PathBuf::from(args.get(index).ok_or_else(|| {
+                        invalid_input("--engine-dir requires a value")
+                    })?));
             }
             "--image" => {
                 index += 1;
@@ -214,7 +214,12 @@ fn handle_connection(mut stream: TcpStream, app: Arc<App>) -> io::Result<()> {
     if method == "GET" && target == "/api/options" {
         return match options_json(&app) {
             Ok(json) => respond_json(&mut stream, 200, &json),
-            Err(error) => respond_text(&mut stream, 412, &error.to_string(), "text/plain; charset=utf-8"),
+            Err(error) => respond_text(
+                &mut stream,
+                412,
+                &error.to_string(),
+                "text/plain; charset=utf-8",
+            ),
         };
     }
     if method == "POST" && target == "/api/matches/start" {
@@ -229,7 +234,12 @@ fn handle_connection(mut stream: TcpStream, app: Arc<App>) -> io::Result<()> {
     if method == "GET" || method == "HEAD" {
         return serve_static(&mut stream, &app.root, &target, method == "HEAD");
     }
-    respond_text(&mut stream, 405, "method not allowed", "text/plain; charset=utf-8")
+    respond_text(
+        &mut stream,
+        405,
+        "method not allowed",
+        "text/plain; charset=utf-8",
+    )
 }
 
 fn handle_events(mut stream: TcpStream, app: &App) -> io::Result<()> {
@@ -255,16 +265,22 @@ fn handle_events(mut stream: TcpStream, app: &App) -> io::Result<()> {
 
 fn handle_start(stream: &mut TcpStream, app: Arc<App>, body: &str) -> io::Result<()> {
     if app.running.swap(true, Ordering::SeqCst) {
-        return respond_text(stream, 409, "a match series is already running", "text/plain; charset=utf-8");
+        return respond_text(
+            stream,
+            409,
+            "a match series is already running",
+            "text/plain; charset=utf-8",
+        );
     }
 
-    let request = match parse_start_request(body).and_then(|request| validate_request(&app, request)) {
-        Ok(request) => request,
-        Err(error) => {
-            app.running.store(false, Ordering::SeqCst);
-            return respond_text(stream, 400, &error.to_string(), "text/plain; charset=utf-8");
-        }
-    };
+    let request =
+        match parse_start_request(body).and_then(|request| validate_request(&app, request)) {
+            Ok(request) => request,
+            Err(error) => {
+                app.running.store(false, Ordering::SeqCst);
+                return respond_text(stream, 400, &error.to_string(), "text/plain; charset=utf-8");
+            }
+        };
 
     app.stop.store(false, Ordering::SeqCst);
     thread::spawn(move || {
@@ -318,7 +334,11 @@ fn run_series(app: &Arc<App>, request: StartRequest) {
             break;
         }
         let side = if request.side == "alternate" {
-            if game % 2 == 0 { "p1" } else { "p2" }
+            if game % 2 == 0 {
+                "p1"
+            } else {
+                "p2"
+            }
         } else {
             request.side.as_str()
         };
@@ -336,7 +356,10 @@ fn run_series(app: &Arc<App>, request: StartRequest) {
 
     app.hub.publish(format!(
         "{{\"type\":\"series_end\",\"wins\":{},\"completed\":{},\"requested\":{},\"stopped\":{}}}",
-        wins, completed, request.games, app.stop.load(Ordering::SeqCst)
+        wins,
+        completed,
+        request.games,
+        app.stop.load(Ordering::SeqCst)
     ));
 }
 
@@ -392,7 +415,14 @@ fn run_match(
         .arg(mount)
         .args(["--entrypoint", "/filler/linux_game_engine"])
         .arg(&app.image)
-        .args(["-f", &format!("maps/{}", request.map), "-p1", &p1, "-p2", &p2]);
+        .args([
+            "-f",
+            &format!("maps/{}", request.map),
+            "-p1",
+            &p1,
+            "-p2",
+            &p2,
+        ]);
     if let Some(seed) = requested_seed {
         command.args(["-s", &seed.to_string()]);
     }
@@ -461,8 +491,8 @@ fn run_match(
             0
         };
     }
-    result.student_won = (side == "p1" && result.winner == 1)
-        || (side == "p2" && result.winner == 2);
+    result.student_won =
+        (side == "p1" && result.winner == 1) || (side == "p2" && result.winner == 2);
     result
 }
 
@@ -615,10 +645,14 @@ fn validate_request(app: &App, request: StartRequest) -> io::Result<StartRequest
     }
     let (maps, opponents) = options(app)?;
     if !maps.iter().any(|name| name == &request.map) {
-        return Err(invalid_input("selected map is not present in the engine bundle"));
+        return Err(invalid_input(
+            "selected map is not present in the engine bundle",
+        ));
     }
     if !opponents.iter().any(|name| name == &request.opponent) {
-        return Err(invalid_input("selected opponent is not present in linux_robots"));
+        return Err(invalid_input(
+            "selected opponent is not present in linux_robots",
+        ));
     }
     Ok(request)
 }
@@ -626,8 +660,7 @@ fn validate_request(app: &App, request: StartRequest) -> io::Result<StartRequest
 fn parse_start_request(body: &str) -> io::Result<StartRequest> {
     Ok(StartRequest {
         map: json_string(body, "map").ok_or_else(|| invalid_input("missing map"))?,
-        opponent: json_string(body, "opponent")
-            .ok_or_else(|| invalid_input("missing opponent"))?,
+        opponent: json_string(body, "opponent").ok_or_else(|| invalid_input("missing opponent"))?,
         side: json_string(body, "side").unwrap_or_else(|| "alternate".to_owned()),
         games: json_number(body, "games").unwrap_or(1).max(0) as usize,
         seed: match json_string(body, "seed") {
@@ -651,7 +684,10 @@ fn engine_ready(engine_dir: &Path) -> io::Result<()> {
         engine_dir.join("maps"),
     ] {
         if !path.exists() {
-            return Err(other(&format!("missing official engine component: {}", path.display())));
+            return Err(other(&format!(
+                "missing official engine component: {}",
+                path.display()
+            )));
         }
     }
     Ok(())
@@ -677,7 +713,9 @@ fn find_project_root() -> io::Result<PathBuf> {
             return Ok(current);
         }
         if !current.pop() {
-            return Err(other("project root not found; run the visualizer from the filler repository"));
+            return Err(other(
+                "project root not found; run the visualizer from the filler repository",
+            ));
         }
     }
 }
@@ -714,7 +752,12 @@ fn handle_raw_replay(stream: &mut TcpStream, app: &App, target: &str) -> io::Res
         })
         .unwrap_or_default();
     if !safe_name(&name) {
-        return respond_text(stream, 400, "invalid replay name", "text/plain; charset=utf-8");
+        return respond_text(
+            stream,
+            400,
+            "invalid replay name",
+            "text/plain; charset=utf-8",
+        );
     }
     let path = app.root.join("replays").join(&name);
     match fs::read(&path) {
@@ -744,7 +787,12 @@ fn respond_json(stream: &mut TcpStream, status: u16, body: &str) -> io::Result<(
     respond_text(stream, status, body, "application/json; charset=utf-8")
 }
 
-fn respond_text(stream: &mut TcpStream, status: u16, body: &str, content_type: &str) -> io::Result<()> {
+fn respond_text(
+    stream: &mut TcpStream,
+    status: u16,
+    body: &str,
+    content_type: &str,
+) -> io::Result<()> {
     respond_bytes(stream, status, body.as_bytes(), content_type, false)
 }
 
@@ -910,7 +958,11 @@ fn percent_decode(value: &str) -> String {
                 continue;
             }
         }
-        output.push(if bytes[index] == b'+' { b' ' } else { bytes[index] });
+        output.push(if bytes[index] == b'+' {
+            b' '
+        } else {
+            bytes[index]
+        });
         index += 1;
     }
     String::from_utf8_lossy(&output).into_owned()
@@ -934,9 +986,7 @@ fn timestamp_millis() -> u128 {
 
 fn open_browser(url: &str) -> io::Result<()> {
     if cfg!(target_os = "windows") {
-        Command::new("cmd")
-            .args(["/C", "start", "", url])
-            .spawn()?;
+        Command::new("cmd").args(["/C", "start", "", url]).spawn()?;
     } else if cfg!(target_os = "macos") {
         Command::new("open").arg(url).spawn()?;
     } else {
