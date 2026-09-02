@@ -701,7 +701,7 @@ fn command_success(command: &mut Command) -> io::Result<bool> {
 }
 
 fn handle_raw_replay(stream: &mut TcpStream, app: &App, target: &str) -> io::Result<()> {
-    let query = target.splitn(2, '?').nth(1).unwrap_or("");
+    let query = target.split_once('?').map(|(_, query)| query).unwrap_or("");
     let name = query
         .split('&')
         .find_map(|pair| {
