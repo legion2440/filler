@@ -71,13 +71,10 @@ impl Strategy {
             let deep = territory_score(board, piece, player, position, &enemy_distance);
             let frontier = projected_frontier(board, piece, player, position, true);
             let enemy_frontier = projected_frontier(board, piece, player, position, false);
-            let combined = candidate.score
-                + deep * 3
-                + frontier as i64 * 7
-                - enemy_frontier as i64 * 5;
+            let combined =
+                candidate.score + deep * 3 + frontier as i64 * 7 - enemy_frontier as i64 * 5;
 
-            if combined > best.score
-                || (combined == best.score && prefer(position, best.position))
+            if combined > best.score || (combined == best.score && prefer(position, best.position))
             {
                 best = ScoredMove {
                     position,
@@ -121,11 +118,7 @@ fn quick_score(
         if distance <= 2 {
             blocking += 1;
         }
-        if x == 0
-            || y == 0
-            || x as usize == board.width - 1
-            || y as usize == board.height - 1
-        {
+        if x == 0 || y == 0 || x as usize == board.width - 1 || y as usize == board.height - 1 {
             edge_cells += 1;
         }
 
@@ -163,8 +156,7 @@ fn quick_score(
     let anchor_y = position.y + piece.height as i32 / 2;
     let center_distance = (anchor_x - center_x).abs() + (anchor_y - center_y).abs();
 
-    -(min_enemy as i64) * attack_weight
-        - sum_enemy * 3
+    -(min_enemy as i64) * attack_weight - sum_enemy * 3
         + blocking * 46
         + frontier.len() as i64 * territory_weight
         + new_cells * 5
@@ -188,11 +180,7 @@ fn territory_score(
         })
         .collect();
 
-    let own_distance = distance_field(
-        board,
-        |cell| player.is_own(cell),
-        Some(&projected),
-    );
+    let own_distance = distance_field(board, |cell| player.is_own(cell), Some(&projected));
 
     let mut score = 0_i64;
     for y in 0..board.height {
@@ -218,26 +206,22 @@ fn territory_score(
     score
 }
 
-fn distance_field<F>(
-    board: &Board,
-    seed: F,
-    extra: Option<&BTreeSet<Position>>,
-) -> Vec<Vec<i32>>
+fn distance_field<F>(board: &Board, seed: F, extra: Option<&BTreeSet<Position>>) -> Vec<Vec<i32>>
 where
     F: Fn(u8) -> bool,
 {
     let mut distance = vec![vec![INFINITE_DISTANCE; board.width]; board.height];
     let mut queue = VecDeque::with_capacity(board.width * board.height);
 
-    for y in 0..board.height {
-        for x in 0..board.width {
+    for (y, (board_row, distance_row)) in board.rows.iter().zip(distance.iter_mut()).enumerate() {
+        for (x, (&cell, slot)) in board_row.iter().zip(distance_row.iter_mut()).enumerate() {
             let point = Position {
                 x: x as i32,
                 y: y as i32,
             };
             let is_extra = extra.map_or(false, |points| points.contains(&point));
-            if seed(board.rows[y][x]) || is_extra {
-                distance[y][x] = 0;
+            if seed(cell) || is_extra {
+                *slot = 0;
                 queue.push_back(point);
             }
         }
@@ -326,16 +310,12 @@ fn projected_frontier(
     frontier.len()
 }
 
-fn closest_territory_distance(
-    board: &Board,
-    player: Player,
-    enemy_distance: &[Vec<i32>],
-) -> i32 {
+fn closest_territory_distance(board: &Board, player: Player, enemy_distance: &[Vec<i32>]) -> i32 {
     let mut best = INFINITE_DISTANCE;
-    for y in 0..board.height {
-        for x in 0..board.width {
-            if player.is_own(board.rows[y][x]) {
-                best = best.min(enemy_distance[y][x]);
+    for (board_row, distance_row) in board.rows.iter().zip(enemy_distance.iter()) {
+        for (&cell, &distance) in board_row.iter().zip(distance_row.iter()) {
+            if player.is_own(cell) {
+                best = best.min(distance);
             }
         }
     }
@@ -343,9 +323,10 @@ fn closest_territory_distance(
 }
 
 fn piece_occupies(piece: &Piece, position: Position, point: Position) -> bool {
-    piece.cells.iter().any(|cell| {
-        position.x + cell.x == point.x && position.y + cell.y == point.y
-    })
+    piece
+        .cells
+        .iter()
+        .any(|cell| position.x + cell.x == point.x && position.y + cell.y == point.y)
 }
 
 fn prefer(candidate: Position, current: Position) -> bool {
