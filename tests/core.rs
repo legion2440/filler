@@ -70,7 +70,7 @@ fn parses_multiple_turns_from_one_stream() {
 Anfield 3 2:\n\
     012\n\
 000 .@.\n\
-001 .$..\n\
+001 .$.\n\
 Piece 2 1:\n\
 OO\n\
 Anfield 3 2:\n\
