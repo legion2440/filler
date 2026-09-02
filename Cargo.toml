@@ -1,0 +1,25 @@
+[package]
+name = "filler"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.63"
+authors = ["Nazar Yestayev"]
+description = "01 Edu Filler player with a live visualizer and replay lab"
+publish = false
+
+[lib]
+name = "filler"
+path = "src/lib.rs"
+
+[[bin]]
+name = "filler"
+path = "src/main.rs"
+
+[[bin]]
+name = "visualizer"
+path = "src/bin/visualizer.rs"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
