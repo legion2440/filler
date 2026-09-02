@@ -79,8 +79,9 @@ impl<R: BufRead> Parser<R> {
     fn find_dimensions(&mut self, prefix: &str) -> io::Result<Option<(usize, usize)>> {
         while let Some(line) = self.read_line()? {
             let trimmed = line.trim();
-            let Some(rest) = trimmed.strip_prefix(prefix) else {
-                continue;
+            let rest = match trimmed.strip_prefix(prefix) {
+                Some(rest) => rest,
+                None => continue,
             };
             let mut parts = rest.split_whitespace();
             let width = parts
@@ -110,14 +111,21 @@ impl<R: BufRead> Parser<R> {
                 .read_line()?
                 .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "incomplete board"))?;
             let mut parts = line.split_whitespace();
-            let Some(index) = parts.next() else { continue };
-            let Some(row) = parts.next() else { continue };
-            if !index.as_bytes().iter().all(u8::is_ascii_digit) {
+            let index = match parts.next() {
+                Some(index) => index,
+                None => continue,
+            };
+            let row = match parts.next() {
+                Some(row) => row,
+                None => continue,
+            };
+            if !index.as_bytes().iter().all(|cell| cell.is_ascii_digit()) {
                 continue;
             }
             if row.len() != width || !row.bytes().all(is_board_cell) {
                 return Err(invalid(&format!(
-                    "invalid board row width/content: expected {width}, got {}",
+                    "invalid board row width/content: expected {}, got {}",
+                    width,
                     row.len()
                 )));
             }
@@ -141,8 +149,9 @@ impl<R: BufRead> Parser<R> {
             let trimmed = row.trim();
             if trimmed.len() != width {
                 return Err(invalid(&format!(
-                    "piece row width {}, expected {width}",
-                    trimmed.len()
+                    "piece row width {}, expected {}",
+                    trimmed.len(),
+                    width
                 )));
             }
             let bytes = trimmed.as_bytes().to_vec();
