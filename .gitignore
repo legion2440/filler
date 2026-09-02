@@ -1,0 +1,9 @@
+/target/
+/replays/
+*.log
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
