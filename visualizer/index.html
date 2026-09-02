@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Filler Match Lab</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="replay.js"></script>
+  <script defer src="renderer.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">FILLER / LIVE VISUALIZER + REPLAY</p>
+      <div class="title-row">
+        <h1>Match Lab</h1>
+        <span id="serverBadge" class="badge neutral">Connecting…</span>
+      </div>
+      <p class="subtitle">Run official Docker matches, watch them live, and replay saved games.</p>
+    </div>
+    <div class="top-actions">
+      <label class="button" for="fileInput">Load replay</label>
+      <input id="fileInput" type="file" accept=".log,.txt,.json,application/json,text/plain" hidden>
+      <button id="demoButton" class="button" type="button">Demo</button>
+      <button id="exportButton" class="button" type="button" disabled>Export JSON</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section class="launcher card">
+      <div class="launcher-head">
+        <div>
+          <p class="label">RUN MATCH</p>
+          <strong id="setupText">Checking engine and Docker…</strong>
+        </div>
+        <div class="presets">
+          <button class="preset" data-preset="wall_e" type="button">wall_e audit</button>
+          <button class="preset" data-preset="h2_d2" type="button">h2_d2 audit</button>
+          <button class="preset" data-preset="bender" type="button">bender audit</button>
+          <button class="preset" data-preset="terminator" type="button">terminator bonus</button>
+        </div>
+      </div>
+      <div class="launcher-grid">
+        <label>Map<select id="mapSelect"></select></label>
+        <label>Opponent<select id="opponentSelect"></select></label>
+        <label>Side
+          <select id="sideSelect">
+            <option value="alternate">Alternate P1/P2</option>
+            <option value="p1">Player 1</option>
+            <option value="p2">Player 2</option>
+          </select>
+        </label>
+        <label>Games<input id="gamesInput" type="number" min="1" max="20" value="1"></label>
+        <label>Seed <span class="hint">blank = random</span><input id="seedInput" type="text" inputmode="numeric" placeholder="random"></label>
+        <label class="check"><input id="liveCheckbox" type="checkbox" checked><span>Live</span></label>
+        <div class="run-actions">
+          <button id="startButton" class="button primary" type="button">▶ Start</button>
+          <button id="stopButton" class="button danger" type="button" disabled>Stop</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="dropZone" class="drop-zone">
+      <span>↧</span><strong>Drop a game_engine log or Replay JSON</strong><small>Replay import also works when index.html is opened directly.</small>
+    </section>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="match" type="button">Match</button>
+      <button class="tab" data-tab="replays" type="button">Saved replays</button>
+    </nav>
+
+    <section id="matchTab" class="tab-panel active">
+      <div class="layout">
+        <section class="card board-card">
+          <div class="card-head">
+            <div><p class="label">BOARD</p><h2 id="matchTitle">No replay loaded</h2></div>
+            <div class="badges"><span id="liveBadge" class="badge neutral">Replay</span><span id="turnBadge" class="badge neutral">Turn — / —</span></div>
+          </div>
+          <div class="board-wrap"><canvas id="boardCanvas"></canvas></div>
+          <div class="board-footer">
+            <div class="legend">
+              <span><i class="swatch p1"></i><span id="p1Name">Player 1</span></span>
+              <span><i class="swatch p2"></i><span id="p2Name">Player 2</span></span>
+              <span><i class="swatch last"></i>Last placed</span>
+            </div>
+            <div class="controls">
+              <div class="transport">
+                <button id="firstButton" type="button">⏮</button>
+                <button id="prevButton" type="button">←</button>
+                <button id="playButton" class="play" type="button">▶ Play</button>
+                <button id="nextButton" type="button">→</button>
+                <button id="lastButton" type="button">⏭</button>
+              </div>
+              <div class="timeline">
+                <input id="timeline" type="range" min="0" max="0" value="0" disabled>
+                <div><span id="timelineText">0 / 0</span><label>Speed <select id="speedSelect"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select></label></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="side-stack">
+          <section class="card">
+            <div class="card-head compact"><div><p class="label">MATCH STATE</p><h2>Turn details</h2></div></div>
+            <div class="score-row"><div class="score p1"><span id="p1Score">0</span><small>P1 cells</small></div><div class="score p2"><span id="p2Score">0</span><small>P2 cells</small></div></div>
+            <dl class="details"><div><dt>Last move</dt><dd id="lastMove">—</dd></div><div><dt>Last player</dt><dd id="lastPlayer">—</dd></div><div><dt>Board</dt><dd id="boardSize">—</dd></div><div><dt>Result</dt><dd id="resultText">—</dd></div></dl>
+          </section>
+          <section class="card">
+            <div class="card-head compact"><div><p class="label">INCOMING PIECE</p><h2 id="pieceSize">—</h2></div></div>
+            <div class="piece-wrap"><canvas id="pieceCanvas"></canvas></div>
+          </section>
+          <section class="card">
+            <div class="card-head compact"><div><p class="label">SERIES</p><h2 id="seriesSummary">No active series</h2></div></div>
+            <div id="seriesResults" class="series-results"><p class="muted">Choose a preset or configure a match above.</p></div>
+          </section>
+        </aside>
+      </div>
+      <section class="card chart-card"><div class="card-head compact"><div><p class="label">TERRITORY</p><h2>Growth by turn</h2></div></div><canvas id="chartCanvas"></canvas></section>
+    </section>
+
+    <section id="replaysTab" class="tab-panel">
+      <section class="card library"><div class="card-head"><div><p class="label">LOCAL LIBRARY</p><h2>Saved replays</h2></div><span class="muted">localStorage</span></div><div id="replayList" class="replay-list"></div></section>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+</body>
+</html>
