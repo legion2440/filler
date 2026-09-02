@@ -542,7 +542,7 @@ fn ensure_setup(app: &App) -> io::Result<()> {
         .args(["--entrypoint", "/bin/bash"])
         .arg(&app.image)
         .args([
-            "-lc",
+            "-c",
             "cd /filler/solution && CARGO_TARGET_DIR=target/docker-linux cargo build --release --bin filler",
         ])
         .status()?;
