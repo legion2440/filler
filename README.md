@@ -80,7 +80,7 @@ or:
 cargo run --bin visualizer
 ```
 
-It opens `http://127.0.0.1:8080`, detects the official engine bundle, prepares the Linux Rust player inside Docker, launches selected matches, streams them to the browser, and stores replay logs automatically.
+It opens `http://127.0.0.1:8080`, detects the official engine bundle and Docker architecture, prepares the Rust player inside Docker, launches selected matches with the matching official engine/robots, streams them to the browser, and stores replay logs automatically.
 
 ## 🐳 Official game environment
 
@@ -126,15 +126,17 @@ FILLER_ENGINE_DIR=/path/to/filler-engine make visualizer
 
 Docker must be running. On the first **Start**, the Rust server automatically:
 
-1. validates `Dockerfile`, `linux_game_engine`, `linux_robots/` and `maps/`;
-2. builds the official image as `filler` if it does not exist;
-3. mounts this repository into `/filler/solution`;
-4. compiles the player **inside the official Rust 1.63 Linux container** using an isolated `target/docker-linux` directory;
-5. launches `linux_game_engine` with the selected map, opponent and side;
-6. streams engine output to the browser through SSE;
-7. writes the complete raw match log to `replays/`.
+1. validates the official `Dockerfile`, `maps/`, and available engine/robot sets;
+2. detects the Docker daemon architecture;
+3. selects `linux_game_engine` + `linux_robots/` for `amd64` / `x86_64`, or `m1_game_engine` + `m1_robots/` for `arm64` / `aarch64`;
+4. builds the official image as `filler` if it does not exist;
+5. mounts this repository into `/filler/solution`;
+6. compiles the player **inside the official Rust 1.63 Linux container** using an isolated `target/docker-linux` directory;
+7. launches the architecture-matched engine with the selected map, opponent and side;
+8. streams engine output to the browser through SSE;
+9. writes the complete raw match log to `replays/`.
 
-This avoids Windows/Linux executable mismatches and avoids manual `GOOS`-style cross-compilation entirely.
+This keeps the player binary, game engine and opponent robots on the same Linux architecture on both amd64 hosts and Apple Silicon Docker environments.
 
 ## 🖥️ Live Visualizer
 
@@ -147,7 +149,7 @@ make visualizer
 The **Run match** panel provides:
 
 - map selection from the real `maps/` directory;
-- opponent selection from `linux_robots/`;
+- opponent selection from the architecture-matched `linux_robots/` or `m1_robots/` directory;
 - `P1`, `P2`, or alternating sides;
 - `1–20` games per series;
 - random or fixed seed;
@@ -192,6 +194,13 @@ cd /mnt/d/TSchool/filler-engine
 docker build -t filler .
 ```
 
+**macOS / Apple Silicon**
+
+```bash
+cd /path/to/filler-engine
+docker build -t filler .
+```
+
 The Dockerfile warning about shell-form `ENTRYPOINT` belongs to the supplied 01 Edu image and does not prevent it from building.
 
 ### 2. Enter the container with the repository mounted
@@ -209,6 +218,14 @@ docker run --rm -it \
 ```bash
 docker run --rm -it \
   -v /mnt/d/TSchool/filler:/filler/solution \
+  filler
+```
+
+**macOS**
+
+```bash
+docker run --rm -it \
+  -v "$PWD:/filler/solution" \
   filler
 ```
 
@@ -236,7 +253,7 @@ The executable is now:
 
 ### 4. Run matches inside the container
 
-`wall_e`:
+On amd64 / x86-64 Docker use `linux_game_engine` and `linux_robots/`. For example, `wall_e`:
 
 ```bash
 ./linux_game_engine \
@@ -272,6 +289,15 @@ Bonus `terminator`:
   -p2 linux_robots/terminator
 ```
 
+On Apple Silicon / ARM64 Docker use the matching official binaries instead:
+
+```bash
+./m1_game_engine \
+  -f maps/map00 \
+  -p1 /filler/solution/target/docker-linux/release/filler \
+  -p2 m1_robots/wall_e
+```
+
 Swap `-p1` and `-p2` to test the student player on the other side.
 
 ## 🧠 Player algorithm
@@ -303,7 +329,7 @@ Candidate generation does not blindly scan every possible top-left origin on the
 - any opponent overlap → invalid;
 - any occupied piece cell outside the board → invalid.
 
-Only occupied cells matter. Empty `.` padding may extend beyond an edge if every occupied piece cell is still inside the Anfield. The parser accepts both `O` and `#` style piece markers because every non-`.` piece character is treated as occupied.
+Boundary validation applies to occupied shape cells; empty `.` padding does not occupy Anfield cells. The parser accepts both `O` and `#` style piece markers because every non-`.` piece character is treated as occupied.
 
 ## 🎯 Strategy
 
@@ -345,14 +371,17 @@ cargo test
 - `p1` and `p2` parsing;
 - Anfield dimensions and rows;
 - piece dimensions and occupied cells;
+- multiple consecutive turns from one input stream;
+- stable and last-piece territory markers (`@` / `a`, `$` / `s`);
 - exactly-one-overlap validation;
 - zero-overlap rejection;
 - two-own-cell rejection;
 - opponent overlap rejection;
-- occupied-cell boundary rejection;
-- empty padding outside a boundary;
-- generated placements being legal;
+- occupied-cell boundary rejection on left, right, top and bottom edges;
+- boundary handling that ignores empty piece padding;
+- generated placements being legal **and complete** against an exhaustive small-board scan;
 - exact `X Y\n` output;
+- explicit no-move fallback formatting as `0 0\n`;
 - strategy producing a legal move;
 - no-move behavior;
 - Player 2 symbols and placements.
@@ -400,7 +429,7 @@ Features:
 - final-board previews;
 - raw logs retained on disk even if browser storage is full.
 
-Manual replay capture is also available from inside `/filler`:
+Manual replay capture is also available from inside `/filler` on amd64 / x86-64:
 
 ```bash
 sh /filler/solution/scripts/capture-replay.sh \
@@ -409,10 +438,13 @@ sh /filler/solution/scripts/capture-replay.sh \
   -p2 linux_robots/wall_e
 ```
 
+For ARM64, pass `m1_robots/...` and launch the replay script from an ARM64-compatible engine workflow.
+
 ## 🏗️ Architecture
 
 ```text
                          official game_engine
+                      (linux_* or m1_* set)
                                  |
                          stdin / stdout
                                  |
@@ -436,8 +468,8 @@ sh /filler/solution/scripts/capture-replay.sh \
                v
  +---------------------------+
  | official filler image     |
- | linux_game_engine         |
- | Rust player + robot       |
+ | architecture-matched      |
+ | engine + robot + player   |
  +-------------+-------------+
                |
         raw engine output
@@ -489,7 +521,8 @@ filler/
 ## ⚠️ Notes
 
 - The official bundle currently uses `rust:1.63-buster`; the player is therefore kept compatible with Rust `1.63` and has no third-party Rust dependencies.
-- The integrated launcher compiles the Linux player inside the official image rather than attempting Windows-to-Linux linking on the host.
+- The integrated launcher detects the Docker daemon architecture and selects the matching official `linux_*` or `m1_*` engine/robot set automatically.
+- The integrated launcher compiles the Linux player inside the official image rather than attempting host-to-container cross-linking.
 - Future pieces are random, so the strategy does not perform deterministic minimax over unknown future pieces.
 - `0 0\n` is returned when no legal placement exists, matching the assignment protocol expectation that the bot must still answer.
 - The visualizer server binds to `127.0.0.1` by default and is intended for local development/audit use.
