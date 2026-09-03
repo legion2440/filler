@@ -22,6 +22,12 @@ struct Config {
     no_open: bool,
 }
 
+#[derive(Clone, Copy)]
+struct DockerRuntime {
+    engine_entrypoint: &'static str,
+    robots_dir: &'static str,
+}
+
 struct EventHub {
     clients: Mutex<Vec<Sender<String>>>,
 }
@@ -379,6 +385,14 @@ fn run_match(
         ..MatchResult::default()
     };
 
+    let runtime = match docker_runtime(&app.engine_dir) {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            result.error = error.to_string();
+            return result;
+        }
+    };
+
     let log_name = format!(
         "{}-{}-{}-{:02}-{}.log",
         timestamp_millis(),
@@ -401,7 +415,7 @@ fn run_match(
         json_escape(side), request.live
     ));
 
-    let opponent = format!("linux_robots/{}", request.opponent);
+    let opponent = format!("{}/{}", runtime.robots_dir, request.opponent);
     let (p1, p2) = if side == "p1" {
         (LINUX_PLAYER.to_owned(), opponent)
     } else {
@@ -413,7 +427,7 @@ fn run_match(
     command
         .args(["run", "--rm", "-v"])
         .arg(mount)
-        .args(["--entrypoint", "/filler/linux_game_engine"])
+        .args(["--entrypoint", runtime.engine_entrypoint])
         .arg(&app.image)
         .args([
             "-f",
@@ -546,6 +560,7 @@ fn ensure_setup(app: &App) -> io::Result<()> {
     if !command_success(Command::new("docker").arg("--version"))? {
         return Err(other("Docker CLI is not available"));
     }
+    docker_runtime(&app.engine_dir)?;
 
     if !docker_image_ready(&app.image) {
         app.hub.publish(format!(
@@ -611,8 +626,9 @@ fn options_json(app: &App) -> io::Result<String> {
 
 fn options(app: &App) -> io::Result<(Vec<String>, Vec<String>)> {
     engine_ready(&app.engine_dir)?;
+    let runtime = docker_runtime(&app.engine_dir)?;
     let mut maps = directory_names(&app.engine_dir.join("maps"))?;
-    let mut opponents = directory_names(&app.engine_dir.join("linux_robots"))?;
+    let mut opponents = directory_names(&app.engine_dir.join(runtime.robots_dir))?;
     maps.sort();
     opponents.sort();
     Ok((maps, opponents))
@@ -651,7 +667,7 @@ fn validate_request(app: &App, request: StartRequest) -> io::Result<StartRequest
     }
     if !opponents.iter().any(|name| name == &request.opponent) {
         return Err(invalid_input(
-            "selected opponent is not present in linux_robots",
+            "selected opponent is not present in the active robot bundle",
         ));
     }
     Ok(request)
@@ -677,12 +693,7 @@ fn parse_start_request(body: &str) -> io::Result<StartRequest> {
 }
 
 fn engine_ready(engine_dir: &Path) -> io::Result<()> {
-    for path in [
-        engine_dir.join("Dockerfile"),
-        engine_dir.join("linux_game_engine"),
-        engine_dir.join("linux_robots"),
-        engine_dir.join("maps"),
-    ] {
+    for path in [engine_dir.join("Dockerfile"), engine_dir.join("maps")] {
         if !path.exists() {
             return Err(other(&format!(
                 "missing official engine component: {}",
@@ -690,7 +701,60 @@ fn engine_ready(engine_dir: &Path) -> io::Result<()> {
             )));
         }
     }
+
+    let linux_ready = engine_dir.join("linux_game_engine").is_file()
+        && engine_dir.join("linux_robots").is_dir();
+    let arm_ready = engine_dir.join("m1_game_engine").is_file()
+        && engine_dir.join("m1_robots").is_dir();
+    if !linux_ready && !arm_ready {
+        return Err(other(
+            "official engine bundle has neither linux nor m1 engine/robot set",
+        ));
+    }
     Ok(())
+}
+
+fn docker_runtime(engine_dir: &Path) -> io::Result<DockerRuntime> {
+    let output = Command::new("docker")
+        .args(["info", "--format", "{{.Architecture}}"])
+        .output()?;
+    if !output.status.success() {
+        return Err(other("Docker engine is not available"));
+    }
+
+    let architecture = String::from_utf8_lossy(&output.stdout);
+    let architecture = architecture.trim();
+    let runtime = match architecture {
+        "arm64" | "aarch64" => DockerRuntime {
+            engine_entrypoint: "/filler/m1_game_engine",
+            robots_dir: "m1_robots",
+        },
+        "amd64" | "x86_64" => DockerRuntime {
+            engine_entrypoint: "/filler/linux_game_engine",
+            robots_dir: "linux_robots",
+        },
+        value => {
+            return Err(other(&format!(
+                "unsupported Docker architecture: {}",
+                value
+            )))
+        }
+    };
+
+    let engine_name = runtime
+        .engine_entrypoint
+        .strip_prefix("/filler/")
+        .unwrap_or(runtime.engine_entrypoint);
+    let engine_path = engine_dir.join(engine_name);
+    let robots_path = engine_dir.join(runtime.robots_dir);
+    if !engine_path.is_file() || !robots_path.is_dir() {
+        return Err(other(&format!(
+            "official engine bundle is missing {} or {} for Docker architecture {}",
+            engine_name, runtime.robots_dir, architecture
+        )));
+    }
+
+    Ok(runtime)
 }
 
 fn resolve_engine_dir(root: &Path, explicit: Option<&Path>) -> io::Result<PathBuf> {
