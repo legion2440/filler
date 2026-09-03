@@ -702,10 +702,10 @@ fn engine_ready(engine_dir: &Path) -> io::Result<()> {
         }
     }
 
-    let linux_ready = engine_dir.join("linux_game_engine").is_file()
-        && engine_dir.join("linux_robots").is_dir();
-    let arm_ready = engine_dir.join("m1_game_engine").is_file()
-        && engine_dir.join("m1_robots").is_dir();
+    let linux_ready =
+        engine_dir.join("linux_game_engine").is_file() && engine_dir.join("linux_robots").is_dir();
+    let arm_ready =
+        engine_dir.join("m1_game_engine").is_file() && engine_dir.join("m1_robots").is_dir();
     if !linux_ready && !arm_ready {
         return Err(other(
             "official engine bundle has neither linux nor m1 engine/robot set",
